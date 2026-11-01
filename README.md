@@ -10,8 +10,8 @@ Matplotlib; runs comfortably on a CPU.
 |-------|-------|--------|
 | 1 | Environment setup (grid, start, goal, obstacles, visualization) | Done |
 | 2 | Robot movement (4 actions, bounds and collision rules) | Done |
-| 3 | Reward function | In progress |
-| 4 | Q-learning | — |
+| 3 | Reward function | Done |
+| 4 | Q-learning | In progress |
 | 5 | Training and visualization | — |
 | 6 | Performance evaluation (vs. random agent and BFS/A*) | — |
 | 7 | Enhancements | — |
@@ -29,6 +29,8 @@ Run the tests from the project root:
 ```bash
 python test_phase1.py
 python test_phase2.py
+python test_phase3.py
+python test_phase4.py
 ```
 
 ## Folder structure
@@ -37,11 +39,14 @@ python test_phase2.py
 rl_robot_navigation/
 ├── env/
 │   └── grid_env.py      # GridEnv: the world the agent lives in
-├── agents/              # Q-learning, random and A* agents (later phases)
+├── agents/
+│   └── q_learning.py    # QLearningAgent, train(), greedy_rollout()
 ├── notebooks/           # Jupyter experiments; import from env/ and agents/
 ├── results/             # saved plots and Q-tables
 ├── test_phase1.py
 ├── test_phase2.py
+├── test_phase3.py
+├── test_phase4.py
 ├── requirements.txt
 └── README.md
 ```
@@ -112,6 +117,31 @@ env.render()
 
 The third step is refused (`bumped_obstacle: True`) because `(1, 2)` is a wall.
 
+## Phase 3 — Reward function
+
+`step(action)` now returns the standard RL 4-tuple `(new_pos, reward, done, info)`.
+
+| Outcome | Reward | Reason |
+|---|---|---|
+| Reached the goal | +100 | Only positive reward; must outweigh the cost of walking there (shortest path = 18 steps → best episode scores 83). |
+| Bumped a wall or obstacle | −10 | Must be worse than a normal step so going around is preferred over pushing in. |
+| Ordinary move | −1 | Small cost per step makes shorter paths better. |
+
+The cases are mutually exclusive (a bump means no movement, so no goal). No
+distance-to-goal shaping: the step penalty plus goal reward already yield
+shortest paths, and shaping can mislead the agent toward the wrong side of a
+wall. `done` is also `True` after `max_steps` (default 200) as a safety net;
+that is not penalised beyond the −1 per step already paid.
+
+Constants live at the top of `grid_env.py`: `REWARD_GOAL`, `REWARD_STEP`,
+`REWARD_COLLISION`, `DEFAULT_MAX_STEPS`. `reward(info)` is a static method so
+the numbers can be changed in one place.
+
+**Tests (8):** reward for each outcome, `done` on goal and on step limit,
+`reset()` clears the step counter, the scripted route totals exactly 83, and
+a consistency check (`collision < step < 0 < goal`, goal worth more than the
+BFS shortest path).
+
 ## Tests so far
 
 - **Phase 1 (8 tests):** grid shape and dtype, obstacle placement, start/goal
@@ -122,3 +152,4 @@ The third step is refused (`bumped_obstacle: True`) because `(1, 2)` is a wall.
   raise, `next_position` is side-effect free, an exhaustive sweep of all
   84 free cells × 4 actions (336 cases), and a scripted 18-move route that
   reaches the goal with zero bumps.
+- **Phase 3 (8 tests):** see the Phase 3 section.
