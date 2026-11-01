@@ -31,12 +31,42 @@ DEFAULT_OBSTACLES = [
     (8, 6), (8, 7),                  # blocker near the goal
 ]
 
+# ----------------------------------------------------------------------
+# Actions (Phase 2)
+# ----------------------------------------------------------------------
+# Actions are plain integers 0..3 so they can index a Q-table later.
+UP, DOWN, LEFT, RIGHT = 0, 1, 2, 3
+ACTIONS = [UP, DOWN, LEFT, RIGHT]
+ACTION_NAMES = {UP: "UP", DOWN: "DOWN", LEFT: "LEFT", RIGHT: "RIGHT"}
+
+# How each action changes (row, col). Remember: row grows DOWNWARD.
+ACTION_DELTAS = {
+    UP:    (-1, 0),
+    DOWN:  (+1, 0),
+    LEFT:  (0, -1),
+    RIGHT: (0, +1),
+}
+
+# ----------------------------------------------------------------------
+# Rewards (Phase 3)
+# ----------------------------------------------------------------------
+# The three outcomes of a step are mutually exclusive: a bump means the
+# robot did not move, so it cannot have reached the goal on that step.
+REWARD_GOAL = 100.0        # reaching the goal cell
+REWARD_STEP = -1.0         # any ordinary move (makes shorter paths better)
+REWARD_COLLISION = -10.0   # trying to leave the grid or enter an obstacle
+
+# Safety net so an episode cannot run forever during training.
+DEFAULT_MAX_STEPS = 200
+
 
 class GridEnv:
     """A static grid world with a start cell, a goal cell and obstacles."""
 
-    def __init__(self, size=10, start=(0, 0), goal=(9, 9), obstacles=None):
+    def __init__(self, size=10, start=(0, 0), goal=(9, 9), obstacles=None,
+                 max_steps=DEFAULT_MAX_STEPS):
         self.size = size
+        self.max_steps = max_steps
         self.start = tuple(start)
         self.goal = tuple(goal)
 
@@ -57,6 +87,7 @@ class GridEnv:
                 raise ValueError(f"{name} {cell} is placed on an obstacle")
 
         self.robot_pos = self.start
+        self.step_count = 0
 
     # ------------------------------------------------------------------
     # Small helper queries (will be used heavily in Phase 2)
@@ -75,9 +106,72 @@ class GridEnv:
         return self.in_bounds(pos) and self.grid[pos] == FREE
 
     def reset(self):
-        """Put the robot back on the start cell and return that position."""
+        """Start a new episode: robot on the start cell, step counter at 0."""
         self.robot_pos = self.start
+        self.step_count = 0
         return self.robot_pos
+
+    # ------------------------------------------------------------------
+    # Movement (Phase 2)
+    # ------------------------------------------------------------------
+    def next_position(self, pos, action):
+        """
+        Where would the robot end up if it took `action` from `pos`?
+
+        Returns (new_pos, info) where info tells you WHY the move did or
+        did not happen. This is a pure function: it does not change the
+        environment, which makes it easy to test and to reuse in A* later.
+        """
+        if action not in ACTION_DELTAS:
+            raise ValueError(f"Unknown action {action}; use one of {ACTIONS}")
+
+        dr, dc = ACTION_DELTAS[action]
+        candidate = (pos[0] + dr, pos[1] + dc)
+
+        info = {"bumped_wall": False, "bumped_obstacle": False}
+
+        if not self.in_bounds(candidate):
+            info["bumped_wall"] = True       # tried to leave the grid
+            return pos, info                 # robot stays where it is
+        if self.is_obstacle(candidate):
+            info["bumped_obstacle"] = True   # tried to enter an obstacle
+            return pos, info                 # robot stays where it is
+        return candidate, info               # legal move
+
+    def step(self, action):
+        """
+        Apply one action. Returns the standard RL 4-tuple:
+
+            new_pos : the robot's position after the action
+            reward  : float, see reward() below
+            done    : True when the episode is over (goal reached, or
+                      the step limit was hit)
+            info    : dict with bumped_wall / bumped_obstacle / reached_goal
+        """
+        new_pos, info = self.next_position(self.robot_pos, action)
+        self.robot_pos = new_pos
+        self.step_count += 1
+
+        info["reached_goal"] = (new_pos == self.goal)
+        reward = self.reward(info)
+        done = info["reached_goal"] or self.step_count >= self.max_steps
+        return new_pos, reward, done, info
+
+    @staticmethod
+    def reward(info):
+        """
+        Map what happened in a step to a number.
+
+        Three mutually exclusive cases, checked from best to worst:
+          reached the goal          -> REWARD_GOAL       (+100)
+          bumped a wall / obstacle  -> REWARD_COLLISION  (-10)
+          ordinary move             -> REWARD_STEP       (-1)
+        """
+        if info["reached_goal"]:
+            return REWARD_GOAL
+        if info["bumped_wall"] or info["bumped_obstacle"]:
+            return REWARD_COLLISION
+        return REWARD_STEP
 
     # ------------------------------------------------------------------
     # Visualization
