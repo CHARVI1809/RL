@@ -72,7 +72,8 @@ def test_training_runs_and_learns():
     hist = train(env, agent, n_episodes=600, log_every=0)
 
     # bookkeeping
-    assert all(len(v) == 600 for v in hist.values())
+    assert all(len(hist[k]) == 600 for k in ("reward", "steps", "success", "epsilon"))
+    assert hist["paths"] == {}                        # nothing recorded by default
     assert np.isfinite(agent.Q).all()
     assert np.any(agent.Q != 0)
 

@@ -176,15 +176,26 @@ class GridEnv:
     # ------------------------------------------------------------------
     # Visualization
     # ------------------------------------------------------------------
-    def render(self, title="Grid World", save_path=None, show=True):
+    def render(self, title="Grid World", save_path=None, show=True,
+               path=None, policy=None, ax=None):
         """
         Draw the grid with matplotlib.
 
         white  = free cell        dark grey = obstacle
         S (blue) = start          G (green) = goal
         red circle = robot's current position
+
+        Phase 5 extras:
+          path   - list of (row, col) positions; drawn as an orange line
+          policy - (size, size) array of actions; drawn as a small arrow
+                   in every free cell (the agent's greedy choice there)
+          ax     - draw into an existing axes (for side-by-side figures)
         """
-        fig, ax = plt.subplots(figsize=(6, 6))
+        own_figure = ax is None
+        if own_figure:
+            fig, ax = plt.subplots(figsize=(6, 6))
+        else:
+            fig = ax.figure
 
         # Draw the map. imshow treats array index [row, col] as [y, x],
         # which matches our (row, col) convention with row 0 on top.
@@ -202,6 +213,25 @@ class GridEnv:
         ax.set_yticks(range(self.size))
         ax.set_xlabel("col")
         ax.set_ylabel("row")
+
+        # Policy arrows: one per free cell, pointing in the greedy direction.
+        if policy is not None:
+            for r in range(self.size):
+                for c in range(self.size):
+                    if self.grid[r, c] == OBSTACLE or (r, c) == self.goal:
+                        continue
+                    dr, dc = ACTION_DELTAS[int(policy[r, c])]
+                    ax.annotate("", xy=(c + 0.35 * dc, r + 0.35 * dr),
+                                xytext=(c - 0.35 * dc, r - 0.35 * dr),
+                                arrowprops=dict(arrowstyle="->", lw=1.2,
+                                                color="steelblue"))
+
+        # Learned / scripted path as a line through cell centres.
+        if path:
+            rows = [p[0] for p in path]
+            cols = [p[1] for p in path]
+            ax.plot(cols, rows, "-", color="darkorange", linewidth=3, alpha=0.9)
+            ax.plot(cols, rows, "o", color="darkorange", markersize=5)
 
         # Robot marker (drawn first so the S/G labels stay readable on top).
         rr, rc = self.robot_pos
@@ -223,7 +253,7 @@ class GridEnv:
             fig.savefig(save_path, dpi=120)
         if show:
             plt.show()
-        else:
+        elif own_figure:
             plt.close(fig)
         return fig, ax
 

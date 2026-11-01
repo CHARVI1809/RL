@@ -79,7 +79,7 @@ class QLearningAgent:
 # ----------------------------------------------------------------------
 # Training loop
 # ----------------------------------------------------------------------
-def train(env, agent, n_episodes=1000, log_every=100):
+def train(env, agent, n_episodes=1000, log_every=100, record_episodes=()):
     """
     Run `n_episodes` episodes of epsilon-greedy Q-learning.
 
@@ -88,12 +88,19 @@ def train(env, agent, n_episodes=1000, log_every=100):
         steps    - number of steps taken
         success  - True if the goal was reached
         epsilon  - exploration rate used for that episode
+    plus
+        paths    - {episode_number: [positions...]} for every episode listed
+                   in `record_episodes` (1-based). Lets you animate what the
+                   robot actually did early in training.
     """
-    history = {"reward": [], "steps": [], "success": [], "epsilon": []}
+    history = {"reward": [], "steps": [], "success": [], "epsilon": [],
+               "paths": {}}
+    record_episodes = set(record_episodes)
 
     for ep in range(1, n_episodes + 1):
         state = env.reset()
         total_reward, done = 0.0, False
+        episode_path = [state]
 
         while not done:
             action = agent.choose_action(state)
@@ -102,11 +109,14 @@ def train(env, agent, n_episodes=1000, log_every=100):
                          terminal=info["reached_goal"])
             state = next_state
             total_reward += reward
+            episode_path.append(state)
 
         history["reward"].append(total_reward)
         history["steps"].append(env.step_count)
         history["success"].append(info["reached_goal"])
         history["epsilon"].append(agent.epsilon)
+        if ep in record_episodes:
+            history["paths"][ep] = episode_path
         agent.decay_epsilon()
 
         if log_every and ep % log_every == 0:
