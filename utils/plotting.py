@@ -58,3 +58,25 @@ def plot_training(history, window=50, save_path=None, show=True):
     else:
         plt.close(fig)
     return fig
+
+
+def plot_comparison(results, save_path=None, show=True):
+    """Bar chart per metric for the output of evaluation.compare()."""
+    names = list(results)
+    metrics = [("success_rate", "Success rate"), ("avg_steps", "Avg steps"),
+               ("avg_reward", "Avg reward"), ("avg_collisions", "Avg collisions")]
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4 * len(metrics), 4))
+    for ax, (key, title) in zip(axes, metrics):
+        vals = [results[n][key] for n in names]
+        bars = ax.bar(names, vals, color=["tab:gray", "tab:blue", "tab:green"][:len(names)])
+        ax.bar_label(bars, fmt="%.2f" if key == "success_rate" else "%.1f")
+        ax.set_title(title)
+        ax.tick_params(axis="x", labelrotation=15)
+    fig.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, dpi=120)
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig

@@ -44,3 +44,38 @@ def animate_path(env, path, save_path="results/robot_path.gif",
     plt.close(fig)
     env.reset()                                      # leave the env tidy
     return anim
+
+
+def animate_agents(env, paths, save_path="results/agents_side_by_side.gif",
+                   interval_ms=200, max_frames=80):
+    """
+    Animate several agents on the same map side by side.
+
+    paths: {name: [positions...]} - e.g. from evaluation.run_episode(..., record_path=True).
+    Agents that finish early stay parked on their final cell while the
+    others keep moving. max_frames caps the total length (random agents
+    can take 200 steps).
+    """
+    names = list(paths)
+    longest = max(len(p) for p in paths.values())
+    n_frames = min(longest, max_frames) if max_frames else longest
+    fig, axes = plt.subplots(1, len(names), figsize=(5 * len(names), 5))
+    axes = [axes] if len(names) == 1 else list(axes)
+
+    def draw(k):
+        for ax, name in zip(axes, names):
+            ax.clear()
+            p = paths[name]
+            j = min(k, len(p) - 1)                   # park finished agents
+            env.robot_pos = p[j]
+            status = "goal" if (j == len(p) - 1 and p[j] == env.goal) else f"{j}/{len(p) - 1}"
+            env.render(ax=ax, show=False, path=p[:j + 1],
+                       title=f"{name}  -  step {status}")
+        return axes
+
+    anim = FuncAnimation(fig, draw, frames=n_frames, interval=interval_ms, repeat=True)
+    if save_path:
+        anim.save(save_path, writer=PillowWriter(fps=1000 / interval_ms))
+    plt.close(fig)
+    env.reset()
+    return anim

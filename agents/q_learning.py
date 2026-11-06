@@ -42,6 +42,13 @@ class QLearningAgent:
         best = np.flatnonzero(q_values == q_values.max())
         return int(self.rng.choice(best))
 
+    def act(self, state):
+        """Final-policy interface shared with the baselines: greedy, no exploration."""
+        return self.greedy_action(state)
+
+    def reset(self):
+        """Nothing to reset between evaluation episodes (the table is the policy)."""
+
     def choose_action(self, state):
         """Epsilon-greedy: explore with probability epsilon, else exploit."""
         if self.rng.random() < self.epsilon:
@@ -88,18 +95,19 @@ def train(env, agent, n_episodes=1000, log_every=100, record_episodes=()):
         steps    - number of steps taken
         success  - True if the goal was reached
         epsilon  - exploration rate used for that episode
+        collisions - wall + obstacle bumps in the episode
     plus
         paths    - {episode_number: [positions...]} for every episode listed
                    in `record_episodes` (1-based). Lets you animate what the
                    robot actually did early in training.
     """
     history = {"reward": [], "steps": [], "success": [], "epsilon": [],
-               "paths": {}}
+               "collisions": [], "paths": {}}
     record_episodes = set(record_episodes)
 
     for ep in range(1, n_episodes + 1):
         state = env.reset()
-        total_reward, done = 0.0, False
+        total_reward, done, collisions = 0.0, False, 0
         episode_path = [state]
 
         while not done:
@@ -109,12 +117,14 @@ def train(env, agent, n_episodes=1000, log_every=100, record_episodes=()):
                          terminal=info["reached_goal"])
             state = next_state
             total_reward += reward
+            collisions += info["bumped_wall"] or info["bumped_obstacle"]
             episode_path.append(state)
 
         history["reward"].append(total_reward)
         history["steps"].append(env.step_count)
         history["success"].append(info["reached_goal"])
         history["epsilon"].append(agent.epsilon)
+        history["collisions"].append(collisions)
         if ep in record_episodes:
             history["paths"][ep] = episode_path
         agent.decay_epsilon()

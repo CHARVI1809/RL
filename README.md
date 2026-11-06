@@ -11,9 +11,9 @@ Matplotlib; runs comfortably on a CPU.
 | 1 | Environment setup (grid, start, goal, obstacles, visualization) | Done |
 | 2 | Robot movement (4 actions, bounds and collision rules) | Done |
 | 3 | Reward function | Done |
-| 4 | Q-learning | In progress |
-| 5 | Training and visualization | — |
-| 6 | Performance evaluation (vs. random agent and BFS/A*) | — |
+| 4 | Q-learning | Done |
+| 5 | Training and visualization | Done |
+| 6 | Performance evaluation (vs. random agent and BFS/A*) | In progress |
 | 7 | Enhancements | — |
 
 ## Setup
@@ -31,6 +31,10 @@ python test_phase1.py
 python test_phase2.py
 python test_phase3.py
 python test_phase4.py
+python test_phase5.py
+python test_phase6.py
+# or everything at once:
+python run_tests.py
 ```
 
 ## Folder structure
@@ -40,13 +44,25 @@ rl_robot_navigation/
 ├── env/
 │   └── grid_env.py      # GridEnv: the world the agent lives in
 ├── agents/
-│   └── q_learning.py    # QLearningAgent, train(), greedy_rollout()
-├── notebooks/           # Jupyter experiments; import from env/ and agents/
+│   ├── q_learning.py    # QLearningAgent, train(), greedy_rollout()
+│   └── baselines.py     # RandomAgent, A* planner, AStarAgent
+├── utils/
+│   ├── plotting.py      # moving_average(), plot_training()
+│   └── animate.py       # animate_path(): GIF of the robot walking a route
+├── notebooks/
+│   └── phase5_watch_the_robot.ipynb   # train, plot, animate (GIF + inline player)
 ├── results/             # saved plots and Q-tables
 ├── test_phase1.py
 ├── test_phase2.py
 ├── test_phase3.py
 ├── test_phase4.py
+├── test_phase5.py
+├── test_phase6.py
+├── run_tests.py         # runs every phase's tests in order
+├── train_and_visualize.py  # Phase 5 entry point
+├── evaluation.py        # run_episode, evaluate, compare, convergence_episode
+├── evaluate_agents.py   # Phase 6 entry point
+├── TESTS.md             # what every test checks, plus observed results
 ├── requirements.txt
 └── README.md
 ```
@@ -142,6 +158,90 @@ the numbers can be changed in one place.
 a consistency check (`collision < step < 0 < goal`, goal worth more than the
 BFS shortest path).
 
+## Phase 4 — Q-learning
+
+`agents/q_learning.py` holds `QLearningAgent`, `train()` and `greedy_rollout()`.
+
+The Q-table is `Q[row, col, action]`, shape `(10, 10, 4)`, initialised to
+zero. Each step updates one entry:
+
+```
+target = reward                              if the goal was reached
+       = reward + γ · max_a Q[next, a]       otherwise
+Q[s, a] += α · (target − Q[s, a])
+```
+
+Defaults: α = 0.1, γ = 0.95, ε from 1.0 → 0.05 with ×0.995 decay per episode.
+
+Two details that matter:
+
+- **Random tie-breaking.** `greedy_action` picks randomly among all
+  equal-best actions; plain `argmax` would always choose UP on a zero table.
+- **`terminal` ≠ `done`.** The update treats only `reached_goal` as terminal.
+  A step-limit ending leaves the robot on a cell that still has value, so
+  bootstrapping continues from it.
+
+`train(env, agent, n_episodes)` returns a history dict (`reward`, `steps`,
+`success`, `epsilon` per episode). `greedy_rollout` follows the learned
+policy with ε = 0 and returns the path.
+
+Observed (seed 0, 1000 episodes, ~0.3 s on CPU): 100 % success from
+episode ~200, average 18.8 steps late in training (ε = 0.05 adds roughly one
+random move per episode), greedy rollout exactly 18 steps.
+
+## Phase 5 — Training and visualization
+
+`python train_and_visualize.py` trains for 1000 episodes and writes:
+
+- `results/training_curves.png` — reward, steps and success rate per episode
+  (raw + 50-episode moving average), with ε overlaid on the reward panel
+- `results/learned_path.png` — the greedy route in orange plus the greedy
+  action in every free cell as an arrow
+- `results/robot_path.gif` — the trained robot walking its route
+- `results/episode_001/025/100.gif` — the same robot early in training
+
+`train(..., record_episodes=(1, 25, 100))` stores full position lists for the
+named episodes in `history["paths"]`. `utils/animate.py::animate_path` turns
+any path into a GIF (`max_frames` caps long early episodes). The notebook
+`notebooks/phase5_watch_the_robot.ipynb` shows everything inline, including an
+interactive player (`HTML(anim.to_jshtml())`).
+
+Observed: success rate pins at 100 % around episode 100; steps keep falling to
+~18.8 by episode 400 (ε = 0.05 adds ~1 random move per episode); greedy
+rollout = 18 steps. Arrows in rarely visited pockets (e.g. (3,1), (1,6)) can
+point in odd directions — Q-learning only guarantees good values for states
+it visits often, and those cells are off every sensible route.
+
+## Phase 6 — Evaluation
+
+`python evaluate_agents.py` trains the learner, then runs 100 greedy episodes
+for each of three agents on the same map and writes `results/comparison.md`
+and `results/comparison.png`.
+
+| Agent | What it is |
+|---|---|
+| Random | picks a uniformly random action each step (lower bound) |
+| Q-learning | the trained table, ε = 0 (never saw the map) |
+| A* | plans the optimal path from the full map, then replays it (upper bound). `plan_path` uses `env.next_position` as its neighbour function so it obeys the same movement rules as the robot; with a zero heuristic it is uniform-cost search / BFS |
+
+Metrics (`evaluation.py`): success rate, average steps, average total reward,
+average collisions (wall + obstacle bumps), and for the learner the
+convergence episode — the point after which the 50-episode smoothed reward
+never again leaves a ±5 band around its final value. `train()` now also
+records collisions per episode.
+
+Observed (seed 0):
+
+| Agent | Success | Avg steps | Avg reward | Avg collisions |
+|---|---|---|---|---|
+| Random | 17% | 188.0 | -652.0 | 53.5 |
+| Q-learning | 100% | 18.0 | 83.0 | 0.0 |
+| A* | 100% | 18.0 | 83.0 | 0.0 |
+
+Q-learning converged at episode 473; collisions per episode fell from 24.6
+(first 100) to 0.2 (last 100). Its greedy policy is identical in length,
+reward and collisions to A*'s optimal plan.
+
 ## Tests so far
 
 - **Phase 1 (8 tests):** grid shape and dtype, obstacle placement, start/goal
@@ -153,3 +253,7 @@ BFS shortest path).
   84 free cells × 4 actions (336 cases), and a scripted 18-move route that
   reaches the goal with zero bumps.
 - **Phase 3 (8 tests):** see the Phase 3 section.
+- **Phase 4 (8 tests):** see the Phase 4 section.
+- **Phase 5 (8 tests)** and **Phase 6 (8 tests):** see those sections.
+
+Full per-test descriptions and observed numbers are in `TESTS.md`.
