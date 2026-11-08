@@ -31,7 +31,9 @@ def animate_path(env, path, save_path="results/robot_path.gif",
 
     def draw(k):
         ax.clear()
-        env.robot_pos = path[k]                      # move the robot
+        env.robot_pos = path[k][:2]                  # move the robot
+        if hasattr(env, "t"):
+            env.t = k                                # movers follow the clock
         env.render(ax=ax, show=False, policy=policy,
                    path=path[:k + 1],                # trail so far
                    title=f"{title}  -  step {k}/{total}")
@@ -67,8 +69,10 @@ def animate_agents(env, paths, save_path="results/agents_side_by_side.gif",
             ax.clear()
             p = paths[name]
             j = min(k, len(p) - 1)                   # park finished agents
-            env.robot_pos = p[j]
-            status = "goal" if (j == len(p) - 1 and p[j] == env.goal) else f"{j}/{len(p) - 1}"
+            env.robot_pos = p[j][:2]
+            if hasattr(env, "t"):
+                env.t = k
+            status = "goal" if (j == len(p) - 1 and tuple(p[j][:2]) == env.goal) else f"{j}/{len(p) - 1}"
             env.render(ax=ax, show=False, path=p[:j + 1],
                        title=f"{name}  -  step {status}")
         return axes

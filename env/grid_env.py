@@ -197,6 +197,21 @@ class GridEnv:
         else:
             fig = ax.figure
 
+        self._draw(ax, path=path, policy=policy)
+        ax.set_title(title)
+        fig.tight_layout()
+
+        if save_path is not None:
+            fig.savefig(save_path, dpi=120)
+        if show:
+            plt.show()
+        elif own_figure:
+            plt.close(fig)
+        return fig, ax
+
+    def _draw(self, ax, path=None, policy=None):
+        """Draw map, start/goal, robot, optional path and policy onto `ax`.
+        Subclasses extend this to add their own layers (see DynamicGridEnv)."""
         # Draw the map. imshow treats array index [row, col] as [y, x],
         # which matches our (row, col) convention with row 0 on top.
         cmap = ListedColormap(["white", "dimgray"])
@@ -245,17 +260,6 @@ class GridEnv:
                 fontsize=16, fontweight="bold", color="royalblue")
         ax.text(gc, gr, "G", ha="center", va="center",
                 fontsize=16, fontweight="bold", color="seagreen")
-
-        ax.set_title(title)
-        fig.tight_layout()
-
-        if save_path is not None:
-            fig.savefig(save_path, dpi=120)
-        if show:
-            plt.show()
-        elif own_figure:
-            plt.close(fig)
-        return fig, ax
 
 
 if __name__ == "__main__":

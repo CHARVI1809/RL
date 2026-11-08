@@ -12,13 +12,16 @@ from env.grid_env import ACTIONS
 
 
 class QLearningAgent:
-    def __init__(self, grid_size, n_actions=len(ACTIONS),
+    def __init__(self, grid_size=None, n_actions=len(ACTIONS),
                  alpha=0.1, gamma=0.95,
                  epsilon=1.0, epsilon_min=0.05, epsilon_decay=0.995,
-                 seed=0):
-        # The Q-table. One row per grid cell, one column per action.
-        # Starts at zero: the agent initially thinks every action is equal.
-        self.Q = np.zeros((grid_size, grid_size, n_actions))
+                 seed=0, state_shape=None):
+        # The Q-table: one entry per (state, action). For the static grid the
+        # state is (row, col); DynamicGridEnv adds a phase, so the shape is
+        # taken from env.state_shape instead.  Starts at zero.
+        if state_shape is None:
+            state_shape = (grid_size, grid_size)
+        self.Q = np.zeros((*state_shape, n_actions))
 
         self.alpha = alpha                  # learning rate
         self.gamma = gamma                  # discount factor

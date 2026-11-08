@@ -13,8 +13,8 @@ Matplotlib; runs comfortably on a CPU.
 | 3 | Reward function | Done |
 | 4 | Q-learning | Done |
 | 5 | Training and visualization | Done |
-| 6 | Performance evaluation (vs. random agent and BFS/A*) | In progress |
-| 7 | Enhancements | — |
+| 6 | Performance evaluation (vs. random agent and BFS/A*) | Done |
+| 7 | Enhancements: moving obstacles | In progress |
 
 ## Setup
 
@@ -33,6 +33,7 @@ python test_phase3.py
 python test_phase4.py
 python test_phase5.py
 python test_phase6.py
+python test_phase7.py
 # or everything at once:
 python run_tests.py
 ```
@@ -42,13 +43,14 @@ python run_tests.py
 ```
 rl_robot_navigation/
 ├── env/
-│   └── grid_env.py      # GridEnv: the world the agent lives in
+│   ├── grid_env.py      # GridEnv: the world the agent lives in
+│   └── dynamic_grid_env.py  # DynamicGridEnv: patrolling obstacles, state (row, col, phase)
 ├── agents/
 │   ├── q_learning.py    # QLearningAgent, train(), greedy_rollout()
 │   └── baselines.py     # RandomAgent, A* planner, AStarAgent
 ├── utils/
 │   ├── plotting.py      # moving_average(), plot_training()
-│   └── animate.py       # animate_path(): GIF of the robot walking a route
+│   └── animate.py       # animate_path() for one agent, animate_agents() side by side
 ├── notebooks/
 │   └── phase5_watch_the_robot.ipynb   # train, plot, animate (GIF + inline player)
 ├── results/             # saved plots and Q-tables
@@ -58,11 +60,19 @@ rl_robot_navigation/
 ├── test_phase4.py
 ├── test_phase5.py
 ├── test_phase6.py
+├── test_phase7.py
 ├── run_tests.py         # runs every phase's tests in order
 ├── train_and_visualize.py  # Phase 5 entry point
 ├── evaluation.py        # run_episode, evaluate, compare, convergence_episode
 ├── evaluate_agents.py   # Phase 6 entry point
+├── train_dynamic.py     # Phase 7 entry point
 ├── TESTS.md             # what every test checks, plus observed results
+├── report/
+│   ├── RL_Robot_Navigation_Report.docx   # report body (4 pages) + references; prepend your own title page
+│   ├── RL_Robot_Navigation_Report.pdf
+│   ├── build_report.js                   # regenerates the .docx from results/
+│   ├── RL_Robot_Navigation_Slides.pptx   # 11-slide deck with animated GIFs
+│   └── build_deck.js                     # regenerates the .pptx from results/
 ├── requirements.txt
 └── README.md
 ```
@@ -215,8 +225,9 @@ it visits often, and those cells are off every sensible route.
 ## Phase 6 — Evaluation
 
 `python evaluate_agents.py` trains the learner, then runs 100 greedy episodes
-for each of three agents on the same map and writes `results/comparison.md`
-and `results/comparison.png`.
+for each of three agents on the same map and writes `results/comparison.md`,
+`results/comparison.png` and `results/agents_side_by_side.gif` (one episode of
+each agent animated side by side; finished agents park on their last cell).
 
 | Agent | What it is |
 |---|---|
@@ -242,6 +253,39 @@ Q-learning converged at episode 473; collisions per episode fell from 24.6
 (first 100) to 0.2 (last 100). Its greedy policy is identical in length,
 reward and collisions to A*'s optimal plan.
 
+## Phase 7 — Moving obstacles
+
+`env/dynamic_grid_env.py` adds `MovingObstacle`s that patrol fixed cyclic
+paths, one cell per time step. Because every patrol is periodic, the world is
+fully determined by the clock, so the state becomes **(row, col, phase)** with
+`phase = t mod period`. With two period-4 patrols the Q-table is
+`10×10×4×4 = 1600` entries — still tabular. Without the phase the state would
+not be Markov: the same cell is safe at some times and fatal at others.
+
+Collision rules (robot moves, then movers advance): walking into a mover's
+next cell, swapping cells with a mover, or being run into while standing
+still all count as collisions (−10, robot stays). The clock always advances,
+so waiting (bumping a wall) is possible but costs −10.
+
+`QLearningAgent(state_shape=env.state_shape)` sizes the table from the env.
+`GridEnv.render` was split into `render` (figure handling) and `_draw`
+(drawing), so the dynamic env only overrides `_draw` to add orange mover
+squares; animations sync `env.t` to the frame index.
+
+`python train_dynamic.py` (3000 episodes, ε decay 0.998) observed, seed 0:
+
+| Agent | Success | Avg steps | Avg reward | Avg collisions |
+|---|---|---|---|---|
+| Random | 18% | 189.6 | -689.6 | 57.6 |
+| Q-learning | 100% | 18.0 | 83.0 | 0.0 |
+| A* (static map) | 100% | 19.0 | 73.0 | 1.0 |
+
+Q-learning learns to time its passage and crosses both patrol corridors
+without a hit in 18 steps. A* planning on the walls alone is hit once and
+scores 10 less. Converged at episode 1167. Outputs:
+`results/dynamic_training_curves.png`, `dynamic_path.png`,
+`dynamic_comparison.md`, `dynamic_agents.gif`.
+
 ## Tests so far
 
 - **Phase 1 (8 tests):** grid shape and dtype, obstacle placement, start/goal
@@ -254,6 +298,6 @@ reward and collisions to A*'s optimal plan.
   reaches the goal with zero bumps.
 - **Phase 3 (8 tests):** see the Phase 3 section.
 - **Phase 4 (8 tests):** see the Phase 4 section.
-- **Phase 5 (8 tests)** and **Phase 6 (8 tests):** see those sections.
+- **Phase 5 (8 tests)**, **Phase 6 (9 tests)** and **Phase 7 (9 tests):** see those sections.
 
 Full per-test descriptions and observed numbers are in `TESTS.md`.
